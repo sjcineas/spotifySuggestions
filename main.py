@@ -1,34 +1,63 @@
-import requests
-from steam import Steam
-from decouple import config
 import streamlit as st
+import requests
 import pandas as pd
 import plotly.express as px
 
-
-KEY = config("STEAM_API_KEY")
-steam = Steam(KEY)
+api_key = "0121802C8A276CDC776E182910BCF0C5"
 
 #METHODS
+
+#Find a Steam account by URL
 @st.cache_data
-def get_user_by_name(user_name):
-    data = steam.users.search_user(user_name)
-    return data
+def findUser(url):
+    id = url.replace("https://steamcommunity.com/profiles/", "")
+
+    if id == url:
+        vanityid = url.replace("https://steamcommunity.com/id/", "")
+        id = requests.get(f"https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/?key={api_key}&vanityurl={vanityid}").json()
+
+    #Gets the raw JSON file
+    data = requests.get(f"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key={api_key}&steamids={id}").json()
+
+    #If there are no players in the response, return fail
+    if data['response']['players'] == []:
+        return 1
+
+    #Return the first player in the response 
+    return data['response']['players'][0]
 
 @st.cache_data
-def get_user_by_id(user_id):
-    try:
-        data = steam.users.get_user_details(user_id)
-        return data
-    except:
-        return st.error("An error occurred when retrieving User by Steam ID. Please enter a valid Steam ID.")
+def findApp(id):
+    #I would not use this, getOwnedGames provides all the info you would need anyway
+    app = requests.get(f"http://store.steampowered.com/api/appdetails?appids={id}").json()
+
+    if app == 'null':
+        return 1
+
+    return app[f"{id}"]['data']
+
 
 @st.cache_data
-def get_total_ach(data):
-    achievements = data["playerstats"]["achievements"]
-    total_achievements = len(achievements)
+def getUserAchievements(user, app):
+    userID = user["steamid"]
+    appID = app["appid"]
+    userAch = requests.get(f"https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/?key={api_key}&steamid={userID}&appid={appID}").json()
 
-    return total_achievements
+    #Will fail if user has private achievements
+    if userAch["playerstats"]["success"] == False:
+        return 1
+
+    return userAch["playerstats"]["achievements"]
+
+@st.cache_data
+def getOwnedGames(user, includeFree):
+    userID = user["steamid"]
+
+    ownedGames = requests.get(f"https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key={api_key}&steamid={userID}&include_appinfo=true&include_played_free_games={includeFree}&skip_unvetted_apps=true&language=en").json()
+
+
+    return ownedGames["response"]["games"]
+
 
 @st.cache_data
 def get_user_location(data):
@@ -43,52 +72,38 @@ def get_user_location(data):
     except:
         st.warning("User's region couldn't be found")
 
-#HEADER
-st.title("Steam User Info")
-
-# Find User By
-find_by = ["Name", "User ID"]
-category = st.sidebar.selectbox("Find user by:", options= find_by)
-
-if category == "Name":
-    agreement = st.checkbox("By checking this box you agree to being aware that the information provided is not stolen. Any data displayed is provided by Steam.")
-
-    if agreement:
-        user_name = st.text_input("Enter a username")
-        submit_user =st.button("Submit")
-        if submit_user:
-            user_data = get_user_by_name(user_name)
-            if user_data == "No match":
-                st.error("No Match Found")
-            else:
-                #st.success(user_data)
-                user_player = user_data["player"]
-                user_player_name = user_player["personaname"]
-                display_name = "User's Player Name: " + user_player_name
-                st.subheader(display_name)
-                loc_data = get_user_location(user_player)
-                user_id = user_player['steamid']
-                url = f" http://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid=440&key={KEY}&steamid={user_id}"
-                achievements_dict = requests.get(url).json()
-                #st.success(achievements_dict)
-                str_ach = f'Total number of achievements: {get_total_ach(achievements_dict)}'
-                st.success(str_ach)
 
 
 
-else:
+def main():
+    st.title("STEAM API")
+    st.header("Steam User Info")
+
+    find_by = []
+    category = st.sidebar.selectbox("Find user by:", options= find_by)
+
     agreement = st.checkbox("By checking this box you agree to being aware that the information provided is not stolen. Any data displayed is provided by Steam.")
     if agreement:
-        user_id = st.text_input("Enter a ID")
-        submit_user = st.button("Submit")
-        if submit_user:
-            user_data = get_user_by_id(user_id)
-            if user_data == "No match":
+        userInput = st.text_input("Enter a Steam Profile URL or Username")
+        submitUser = st.button("Submit")
+        if submitUser:
+            user = findUser(userInput)
+            if user == 1:
                 st.error("No Match Found")
             else:
-                # st.success(user_data)
-                user_player = user_data["player"]
-                user_player_name = user_player["personaname"]
-                display_name = "User's Player Name: " + user_player_name
-                st.subheader(display_name)
-                loc_data = get_user_location(user_player)
+
+                #Display Player found
+                st.success("Player Found")
+                st.subheader("User's Player Name: " + user['personaname'])
+                st.image(user['avatarfull'])
+                loc_data = get_user_location
+                gameLibrary = getOwnedGames(user, True)
+                
+
+                gameOption = st.selectbox("Select Game", gameLibrary, index=0, format_func= lambda x: x['name'])
+                st.subheader(getUserAchievements(user, gameOption))
+                
+        
+
+
+    
