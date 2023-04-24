@@ -1,3 +1,4 @@
+import requests
 from steam import Steam
 from decouple import config
 import streamlit as st
@@ -7,6 +8,7 @@ import plotly.express as px
 
 KEY = config("STEAM_API_KEY")
 steam = Steam(KEY)
+
 #METHODS
 @st.cache_data
 def get_user_by_name(user_name):
@@ -21,6 +23,12 @@ def get_user_by_id(user_id):
     except:
         return st.error("An error occurred when retrieving User by Steam ID. Please enter a valid Steam ID.")
 
+@st.cache_data
+def get_total_ach(data):
+    achievements = data["playerstats"]["achievements"]
+    total_achievements = len(achievements)
+
+    return total_achievements
 
 @st.cache_data
 def get_user_location(data):
@@ -59,6 +67,13 @@ if category == "Name":
                 display_name = "User's Player Name: " + user_player_name
                 st.subheader(display_name)
                 loc_data = get_user_location(user_player)
+                user_id = user_player['steamid']
+                url = f" http://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/?appid=440&key={KEY}&steamid={user_id}"
+                achievements_dict = requests.get(url).json()
+                #st.success(achievements_dict)
+                str_ach = f'Total number of achievements: {get_total_ach(achievements_dict)}'
+                st.success(str_ach)
+
 
 
 else:
