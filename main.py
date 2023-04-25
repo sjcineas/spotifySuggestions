@@ -3,7 +3,8 @@ from steam import Steam
 from decouple import config
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+# import plotly.express as px
+from datetime import datetime
 
 api_key = "0121802C8A276CDC776E182910BCF0C5"
 KEY = config("STEAM_API_KEY")
@@ -48,7 +49,7 @@ def getUserAchievements(user, app):
     userID = user["steamid"]
     appID = app["appid"]
     userAch = requests.get(
-        f"https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/?key={api_key}&steamid={userID}&appid={appID}").json()
+        f"https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/?key={api_key}&steamid={userID}&appid={appID}&l=en").json()
 
     # Will fail if user has private achievements
     # Will fail if user has private achievements or 'achievements' key is missing
@@ -73,7 +74,7 @@ def getOwnedGames(user, includeFree):
 
 @st.cache_data
 def total_ach(data):
-    count = 0;
+    count = 0
     if isinstance(data, list):
         for i in data:
             if int(i['achieved']) > 0:
@@ -83,16 +84,19 @@ def total_ach(data):
 #Store for table
 @st.cache_data
 def ach_record(user, gameLibrary):
+    directory = {}
     table = {
         'Game Name': [],
         'Total Achievements': []
 
     }
     for i in gameLibrary:
+        achievements = getUserAchievements(user, i)
+        directory[i['name']] = achievements
         table['Game Name'].append(i['name'])
-        table['Total Achievements'].append(total_ach(getUserAchievements(user, i)))
+        table['Total Achievements'].append(total_ach(achievements))
 
-    return table
+    return directory, table
 
 @st.cache_data
 def get_user_by_name(user_name):
@@ -119,6 +123,47 @@ def get_user_location(data):
         st.map(loc_data, zoom=2)
     except:
         st.warning("User's region couldn't be found")
+
+def increment_pages():
+    st.session_state.pages += 1
+
+
+def decrement_pages():
+    st.session_state.pages -= 1
+
+@st.cache_data
+def printAchievements(app, achievements_dir):
+    app_key = app["name"]
+    achievements = achievements_dir.get(app_key)
+
+    if len(achievements) == 0:
+        st.write("No achievements found for this game.")
+    else:
+        num_achievements = len([a for a in achievements if a['achieved']])
+        if num_achievements == 0:
+            st.write("You have not achieved any achievements for this game.")
+        else:
+            st.write(
+                f"You have achieved {num_achievements} out of {len(achievements)} achievements for this game.")
+            page_size = 5
+            num_pages = (num_achievements + page_size - 1) // page_size
+
+            col1, col2 = st.columns(2)
+            if st.session_state.pages > 1:
+                col1.button("◀️", on_click=decrement_pages)
+            if st.session_state.pages < num_pages:
+                col1.button("▶️️", on_click=increment_pages)
+            start_idx = (st.session_state.pages - 1) * page_size
+            end_idx = min(start_idx + page_size, num_achievements)
+            for achievement in achievements:
+                if achievement['achieved']:
+                    st.write(f"Name: {achievement['name']}")
+                    st.write(f"Description: {achievement['description']}")
+                    time_achieved = datetime.utcfromtimestamp(achievement['unlocktime']).strftime(
+                        '%Y-%m-%d %H:%M:%S')
+                    st.write(f"Achieved on: {time_achieved}")
+                    st.write("---")
+
 
 #HEADER
 st.title("Steam User Info")
@@ -152,17 +197,23 @@ if category == "Name":
                     st.success("Player Found")
                     st.subheader("User's Player Name: " + user['personaname'])
                     st.image(user['avatarfull'])
-                    gameLibrary = getOwnedGames(user, True)
-
                     loc_data = get_user_location(user_player)
                     gameLibrary = getOwnedGames(user, True)
+                    achievements_dir, achievements_table = ach_record(user, gameLibrary)
 
-                    gameOption = st.selectbox("Select Game", gameLibrary, index=0, format_func=lambda x: x['name'])
-                    # st.subheader(getUserAchievements(user, gameOption))
-                    total_ach(getUserAchievements(user, gameOption))
-                    ach_for_player = ach_record(user, gameLibrary)
+                    if 'pages' not in st.session_state or 'game' not in st.session_state:
+                        st.session_state.pages = 1
 
-                    ach_df = pd.DataFrame(ach_for_player)
+                    def printAchs(app):
+                        printAchievements(app, achievements_dir)
+
+                    with st.form("Get Achievements"):
+                        game = st.selectbox("Select Game", gameLibrary, format_func=lambda x: x['name'])
+                        st.form_submit_button("Submit", on_click=printAchs, args=(game,))
+
+                    # total_ach(getUserAchievements(user, game_selected))
+
+                    ach_df = pd.DataFrame(achievements_table)
                     st.dataframe(ach_df)
 
 
