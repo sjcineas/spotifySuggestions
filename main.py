@@ -10,6 +10,25 @@ KEY = config("STEAM_API_KEY")
 steam = Steam(KEY)
 
 #METHODS
+
+@st.cache_data
+def create_bar_chart(df, x_col, y_col):
+    fig = px.bar(df, x=x_col, y=y_col)
+    st.plotly_chart(fig)
+@st.cache_data
+def chart_content(tab_dict):
+    length = len(tab_dict["Game Name"])
+    chart_tab = {
+        'Game Name': [],
+        'Total Achievements': []
+    }
+    for i in range(0, length):
+        if tab_dict['Total Achievements'][i] > 0:
+            chart_tab['Game Name'].append(tab_dict['Game Name'][i])
+            chart_tab['Total Achievements'].append(tab_dict['Total Achievements'][i])
+
+    return chart_tab
+
 # Find a Steam account by URL
 @st.cache_data
 def findUser(url):
@@ -156,14 +175,18 @@ if category == "Name":
 
                     loc_data = get_user_location(user_player)
                     gameLibrary = getOwnedGames(user, True)
+                    gameOption = gameLibrary[0]
 
-                    gameOption = st.selectbox("Select Game", gameLibrary, index=0, format_func=lambda x: x['name'])
+
                     # st.subheader(getUserAchievements(user, gameOption))
                     total_ach(getUserAchievements(user, gameOption))
                     ach_for_player = ach_record(user, gameLibrary)
 
                     ach_df = pd.DataFrame(ach_for_player)
                     st.dataframe(ach_df)
+                    chart_df = pd.DataFrame(chart_content(ach_for_player))
+                    create_bar_chart(chart_df, 'Game Name', 'Total Achievements')
+
 
 
 
@@ -199,11 +222,13 @@ else:
                     loc_data = get_user_location(user_player)
                     gameLibrary = getOwnedGames(user, True)
 
-                    #gameOption = st.selectbox("Select Game", gameLibrary, index=0, format_func=lambda x: x['name'])
+                    gameOption = st.selectbox("Select Game", gameLibrary, index=0, format_func=lambda x: x['name'])
                     # st.subheader(getUserAchievements(user, gameOption))
                     #total_ach(getUserAchievements(user, gameOption))
                     ach_for_player = ach_record(user, gameLibrary)
 
                     ach_df = pd.DataFrame(ach_for_player)
                     st.dataframe(ach_df)
+
+
 
