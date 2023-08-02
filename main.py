@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 import plotly.express as px
 
-api_key = "0121802C8A276CDC776E182910BCF0C5"
+api_key = "<API KEY>"
 
 #METHODS
 
