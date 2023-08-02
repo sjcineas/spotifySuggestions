@@ -6,7 +6,7 @@ import pandas as pd
 # import plotly.express as px
 from datetime import datetime
 
-api_key = "0121802C8A276CDC776E182910BCF0C5"
+api_key = "<api key>"
 KEY = config("STEAM_API_KEY")
 steam = Steam(KEY)
 
